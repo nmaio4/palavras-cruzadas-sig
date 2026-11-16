@@ -176,6 +176,7 @@
     return {
       total: D.words.length,
       certas: function(){ return D.words.filter(wordOk).length; },
+      answers: function(){ var o={}; D.words.forEach(function(w){ o['r'+(w.n<10?'0':'')+w.n] = w.cells.map(function(x){ return x.inp.value||'-'; }).join(''); }); return o; },
       empty: function(){ var n=0; all(function(x){ if(!x.inp.value) n++; }); return n; },
       lock: function(){ all(function(x){ x.inp.readOnly=true; x.el.classList.add(x.inp.value===x.sol?'ok':'bad'); }); },
       reveal: function(){ all(function(x){ x.inp.value=x.sol; }); },
@@ -204,6 +205,7 @@
     if(empty && !warned){ warned = true; say('Faltam '+empty+' casa(s) por preencher. Clique novamente em Submeter para enviar assim mesmo.'); return; }
     var attrs = { nome: nome.slice(0,100), certas: sum(function(p){ return p.certas(); }),
                   total: sum(function(p){ return p.total; }), tempo_seg: 0, data_resposta: Date.now() };
+    PZ.forEach(function(p){ var a=p.answers(); Object.keys(a).forEach(function(k){ attrs[k]=a[k]; }); });
     if(!CONFIG.serviceUrl){ finish(false, attrs); return; }
     bSubmit.disabled = true; say('A gravar...');
     fetch(CONFIG.serviceUrl+'/addFeatures', {

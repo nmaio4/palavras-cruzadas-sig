@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Palavras Cruzadas SIG</title>
+<style>
+  :root{--ink:#16324a;--line:#16324a;--bg:#f4f7f9;--card:#fff;--accent:#0b7fab;--word:#d8eef7;--cur:#ffd766;--ok:#d5f0dc;--bad:#f9d3d0;--muted:#5d7385}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+  header{padding:14px 18px 6px}
+  h1{margin:0;font-size:1.35rem}
+  header p{margin:4px 0 0;color:var(--muted);font-size:.9rem}
+  main{display:flex;flex-wrap:wrap;gap:18px;padding:12px 18px 18px;align-items:flex-start}
+  .left{flex:1 1 420px;min-width:300px;max-width:640px}
+  .right{flex:1 1 300px;min-width:260px}
+  #current{background:var(--card);border-left:4px solid var(--accent);padding:8px 12px;border-radius:4px;min-height:40px;font-size:.95rem;margin-bottom:10px}
+  #grid{display:grid;gap:0;width:100%;background:transparent}
+  .cell{position:relative;aspect-ratio:1/1}
+  .cell.on{background:#fff;border:1px solid var(--line);margin:-.5px}
+  .cell input{position:absolute;inset:0;width:100%;height:100%;border:0;background:transparent;text-align:center;text-transform:uppercase;font-weight:600;color:var(--ink);font-size:clamp(10px,2.3vw,19px);padding:18% 0 0;caret-color:transparent;outline:none;font-family:inherit}
+  .cell .num{position:absolute;top:1px;left:2px;font-size:clamp(6px,1.1vw,10px);color:var(--muted);pointer-events:none;line-height:1}
+  .cell.given{background:#e3e9ee}
+  .cell.given input{color:#000;font-weight:700}
+  .cell.inword{background:var(--word)}
+  .cell.cur{background:var(--cur)}
+  .cell.ok{background:var(--ok)}
+  .cell.bad{background:var(--bad)}
+  .bar{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  button{font:inherit;font-size:.88rem;padding:7px 12px;border:1px solid var(--accent);background:#fff;color:var(--accent);border-radius:4px;cursor:pointer}
+  button.primary{background:var(--accent);color:#fff}
+  button:hover{filter:brightness(.95)}
+  #msg{margin-top:10px;font-weight:600;min-height:1.3em}
+  .clues{background:var(--card);border-radius:6px;padding:10px 14px;margin-bottom:12px}
+  .clues h2{font-size:1rem;margin:2px 0 6px}
+  .clues ol{list-style:none;margin:0;padding:0}
+  .clues li{padding:4px 6px;border-radius:4px;cursor:pointer;font-size:.9rem;line-height:1.3}
+  .clues li b{display:inline-block;min-width:1.7em}
+  .clues li.active{background:var(--word)}
+  .clues li.done{color:var(--muted);text-decoration:line-through}
+  .note{font-size:.8rem;color:var(--muted)}
+  .who{display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+  .who label{font-size:.9rem;font-weight:600}
+  .who input{flex:1 1 180px;font:inherit;padding:7px 9px;border:1px solid #9db3c2;border-radius:4px}
+  #timer{font-variant-numeric:tabular-nums;font-weight:600;background:var(--card);padding:6px 10px;border-radius:4px}
+  button:disabled{opacity:.5;cursor:default}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+<header>
+  <h1>Palavras Cruzadas SIG</h1>
+  <p>Escreva o seu nome, preencha a grelha e clique em Submeter. Clicar duas vezes na mesma casa alterna entre horizontal e vertical. As letras dos cruzamentos já estão preenchidas. O tempo começa a contar na primeira letra.</p>
+</header>
+<main>
+  <div class="left">
+    <div class="who"><label for="nome">Nome</label><input id="nome" type="text" maxlength="100" autocomplete="name"><span id="timer">00:00</span></div>
+    <div id="current">&nbsp;</div>
+    <div id="grid"></div>
+    <div class="bar">
+      <button class="primary" id="bSubmit">Submeter</button>
+      <button id="bClear">Limpar</button>
+      <button id="bAll" hidden>Ver soluções</button>
+    </div>
+    <div id="msg" aria-live="polite"></div>
+    <p class="note">As respostas escrevem-se sem acentos e com C em vez de Ç.</p>
+  </div>
+  <div class="right">
+    <div class="clues"><h2>Horizontais</h2><ol id="cA"></ol></div>
+    <div class="clues"><h2>Verticais</h2><ol id="cD"></ol></div>
+  </div>
+</main>
+<script>
+(function(){
+  /* URL da tabela alojada onde as respostas são gravadas. Vazio = modo de teste (não grava). */
+  var CONFIG = { serviceUrl: 'https://services2.arcgis.com/OgQJHQk6n5pOT7mt/arcgis/rest/services/PalavrasCruzadasSIG_Respostas/FeatureServer/0' };
+  var D = {"rows": 18, "cols": 19, "words": [{"n": 9, "dir": "A", "r": 6, "c": 5, "a": "GEODATABASE", "clue": "Formato da Esri para armazenar e gerir dados geográficos"}, {"n": 10, "dir": "D", "r": 6, "c": 10, "a": "TOPOLOGIA", "clue": "Regras que definem as relações espaciais entre elementos (adjacência, conectividade)"}, {"n": 16, "dir": "A", "r": 9, "c": 10, "a": "ORTOFOTO", "clue": "Imagem aérea corrigida geometricamente"}, {"n": 11, "dir": "D", "r": 7, "c": 16, "a": "ALTIMETRIA", "clue": "Representação do relevo através de cotas e curvas de nível"}, {"n": 1, "dir": "D", "r": 0, "c": 8, "a": "LATITUDE", "clue": "Coordenada angular medida a partir do Equador"}, {"n": 12, "dir": "D", "r": 8, "c": 12, "a": "ATRIBUTO", "clue": "Cada campo da tabela associada a uma camada"}, {"n": 2, "dir": "D", "r": 0, "c": 11, "a": "VALVULA", "clue": "Órgão que permite seccionar ou regular o caudal numa conduta"}, {"n": 5, "dir": "D", "r": 2, "c": 5, "a": "POLIGONO", "clue": "Geometria fechada usada para representar áreas"}, {"n": 19, "dir": "A", "r": 14, "c": 7, "a": "CADASTRO", "clue": "Registo sistemático das infraestruturas ou parcelas de um território"}, {"n": 18, "dir": "A", "r": 12, "c": 12, "a": "BUFFER", "clue": "Zona de influência gerada a uma distância fixa de um elemento"}, {"n": 17, "dir": "D", "r": 10, "c": 8, "a": "HIDRANTE", "clue": "Boca de incêndio ou marco de água ligado à rede de abastecimento"}, {"n": 3, "dir": "D", "r": 0, "c": 13, "a": "PROJECAO", "clue": "Transformação da superfície curva da Terra num plano"}, {"n": 4, "dir": "A", "r": 1, "c": 13, "a": "RASTER", "clue": "Modelo de dados em grelha de células"}, {"n": 7, "dir": "A", "r": 4, "c": 1, "a": "PIXEL", "clue": "Menor elemento de uma imagem"}, {"n": 13, "dir": "A", "r": 9, "c": 0, "a": "COLETOR", "clue": "Conduta principal da rede de drenagem de águas residuais"}, {"n": 21, "dir": "A", "r": 16, "c": 13, "a": "CAMADA", "clue": "«Layer», em português"}, {"n": 8, "dir": "A", "r": 4, "c": 13, "a": "ESCALA", "clue": "Relação entre a distância no mapa e a distância real"}, {"n": 6, "dir": "D", "r": 3, "c": 18, "a": "DATUM", "clue": "Referência geodésica de um sistema de coordenadas, como o ETRS89"}, {"n": 14, "dir": "D", "r": 9, "c": 2, "a": "LIDAR", "clue": "Tecnologia de deteção remota por laser que gera nuvens de pontos"}, {"n": 15, "dir": "D", "r": 9, "c": 6, "a": "RAMAL", "clue": "Ligação entre a rede pública e o prédio"}, {"n": 20, "dir": "A", "r": 16, "c": 6, "a": "VETOR", "clue": "Modelo de dados que representa pontos, linhas e polígonos"}]};
+  var grid = document.getElementById('grid');
+  grid.style.gridTemplateColumns = 'repeat(' + D.cols + ', 1fr)';
+  var cells = {}, key = function(r,c){return r+'_'+c;};
+  D.words.sort(function(a,b){return a.n-b.n;});
+  D.words.forEach(function(w,i){
+    w.id = i; w.cells = [];
+    for (var k=0;k<w.a.length;k++){
+      var r = w.r + (w.dir==='D'?k:0), c = w.c + (w.dir==='A'?k:0), id = key(r,c);
+      if(!cells[id]) cells[id] = {r:r,c:c,sol:w.a[k],words:{}};
+      cells[id].words[w.dir] = w; w.cells.push(cells[id]);
+    }
+    cells[key(w.r,w.c)].num = w.n;
+  });
+  for (var r=0;r<D.rows;r++) for (var c=0;c<D.cols;c++){
+    var d = document.createElement('div'); d.className='cell';
+    var ce = cells[key(r,c)];
+    if (ce){
+      d.className += ' on';
+      if (ce.num){ var s=document.createElement('span'); s.className='num'; s.textContent=ce.num; d.appendChild(s); }
+      var inp = document.createElement('input');
+      inp.type='text'; inp.autocomplete='off'; inp.spellcheck=false;
+      inp.setAttribute('autocapitalize','characters'); inp.setAttribute('aria-label','Linha '+(r+1)+', coluna '+(c+1));
+      d.appendChild(inp); ce.el=d; ce.inp=inp; bind(ce);
+    }
+    grid.appendChild(d);
+  }
+  var nGiven=0;
+  Object.keys(cells).forEach(function(k){ var x=cells[k];
+    if(x.words.A && x.words.D){ x.given=true; x.inp.value=x.sol; x.inp.readOnly=true; x.el.classList.add('given'); nGiven++; } });
+  var cur=null, dir='A';
+  function norm(s){ return s.normalize('NFD').toUpperCase().replace(/[^A-Z]/g,''); }
+  function word(){ return cur && (cur.words[dir] || cur.words[dir==='A'?'D':'A']); }
+  function paint(){
+    Object.keys(cells).forEach(function(k){ cells[k].el.classList.remove('inword','cur'); });
+    document.querySelectorAll('.clues li').forEach(function(li){ li.classList.remove('active'); });
+    var w = word(); if(!w) return;
+    w.cells.forEach(function(x){ x.el.classList.add('inword'); });
+    cur.el.classList.add('cur');
+    w.li.classList.add('active');
+    document.getElementById('current').innerHTML = '<b>'+w.n+' '+(w.dir==='A'?'horizontal':'vertical')+'</b> · '+w.clue+' ('+w.a.length+' letras)';
+  }
+  function go(ce, nd){
+    if(!ce) return;
+    if(nd) dir = nd;
+    if(!ce.words[dir]) dir = dir==='A'?'D':'A';
+    cur = ce; ce.inp.focus(); paint();
+  }
+  function step(n){
+    var w = word(), i = w.cells.indexOf(cur)+n;
+    while (i>=0 && i<w.cells.length && w.cells[i].given) i+=n;
+    if (i>=0 && i<w.cells.length) go(w.cells[i]);
+  }
+  function clearMarks(ce){ ce.el.classList.remove('ok','bad'); }
+  function bind(ce){
+    ce.inp.addEventListener('mousedown', function(){
+      if (cur===ce && ce.words.A && ce.words.D) dir = dir==='A'?'D':'A';
+    });
+    ce.inp.addEventListener('focus', function(){ if(cur!==ce) go(ce); else paint(); });
+    ce.inp.addEventListener('click', function(){ go(ce); });
+    ce.inp.addEventListener('input', function(){
+      if(submitted){ ce.inp.value = ce.inp.value.slice(0,1); return; } startTimer(); var v = norm(ce.inp.value); ce.inp.value = v.slice(-1); clearMarks(ce);
+      if (ce.inp.value) step(1);
+      refreshDone();
+    });
+    ce.inp.addEventListener('keydown', function(e){
+      var mv = {ArrowLeft:[0,-1,'A'],ArrowRight:[0,1,'A'],ArrowUp:[-1,0,'D'],ArrowDown:[1,0,'D']}[e.key];
+      if (mv){ e.preventDefault(); var t = cells[key(ce.r+mv[0],ce.c+mv[1])]; if(t) go(t, t.words[mv[2]]?mv[2]:null); return; }
+      if (submitted && (e.key==='Backspace'||e.key==='Delete')){ e.preventDefault(); return; }
+      if (e.key==='Backspace'){ e.preventDefault(); clearMarks(ce);
+        if (ce.inp.value && !ce.given) ce.inp.value=''; else { step(-1); if(cur!==ce && !cur.given){ cur.inp.value=''; clearMarks(cur);} }
+        refreshDone(); return; }
+      if (e.key==='Delete'){ if(!ce.given) ce.inp.value=''; clearMarks(ce); refreshDone(); return; }
+      if (ce.given && !submitted && e.key.length===1 && norm(e.key) && !e.ctrlKey && !e.metaKey){
+        e.preventDefault(); step(1);
+        if (cur!==ce && !cur.given){ var l=norm(e.key); if(l){ startTimer(); cur.inp.value=l; step(1); refreshDone(); } }
+        return; }
+      if (e.key===' ' ){ e.preventDefault(); if(ce.words.A&&ce.words.D){ dir=dir==='A'?'D':'A'; paint(); } return; }
+      if (e.key==='Tab'){ e.preventDefault(); var w=word(), n=D.words.length; var nx=D.words[(w.id+(e.shiftKey?n-1:1))%n]; go(nx.cells[0], nx.dir); }
+    });
+  }
+  D.words.forEach(function(w){
+    var li = document.createElement('li');
+    li.innerHTML = '<b>'+w.n+'</b>'+w.clue+' <span class="note">('+w.a.length+')</span>';
+    li.addEventListener('click', function(){
+      var t = w.cells.filter(function(x){return !x.inp.value;})[0] || w.cells[0];
+      go(t, w.dir);
+    });
+    w.li = li; document.getElementById(w.dir==='A'?'cA':'cD').appendChild(li);
+  });
+  var t0=null, timerId=null, elapsed=0, submitted=false, warned=false;
+  var msgEl=document.getElementById('msg'), nameEl=document.getElementById('nome'),
+      bSubmit=document.getElementById('bSubmit'), bAll=document.getElementById('bAll'), bClear=document.getElementById('bClear');
+  function say(t){ msgEl.textContent=t; }
+  function fmt(s){ var m=Math.floor(s/60), x=s%60; return (m<10?'0':'')+m+':'+(x<10?'0':'')+x; }
+  function tick(){ elapsed=Math.round((Date.now()-t0)/1000); document.getElementById('timer').textContent=fmt(elapsed); }
+  function startTimer(){ if(t0||submitted) return; t0=Date.now(); timerId=setInterval(tick,1000); }
+  function wordOk(w){ return w.cells.every(function(x){return x.inp.value===x.sol;}); }
+  function refreshDone(){
+    warned=false;
+    D.words.forEach(function(w){ w.li.classList.toggle('done', w.cells.every(function(x){return !!x.inp.value;})); });
+  }
+  function finish(saved, attrs){
+    submitted=true; clearInterval(timerId);
+    Object.keys(cells).forEach(function(k){ var x=cells[k]; x.inp.readOnly=true;
+      x.el.classList.add(x.inp.value===x.sol?'ok':'bad'); });
+    D.words.forEach(function(w){ w.li.classList.toggle('done', wordOk(w)); });
+    nameEl.disabled=true; bSubmit.disabled=true; bClear.disabled=true; bAll.hidden=false;
+    say(attrs.certas+' de '+attrs.total+' palavras certas em '+fmt(attrs.tempo_seg)+'. '+
+        (saved?'Resposta gravada. Obrigado!':'Modo de teste: resposta não gravada.'));
+  }
+  bSubmit.addEventListener('click', function(){
+    if(submitted) return;
+    var nome=nameEl.value.trim();
+    if(!nome){ say('Indique o seu nome antes de submeter.'); nameEl.focus(); return; }
+    var empty=Object.keys(cells).filter(function(k){return !cells[k].inp.value;}).length;
+    if(empty && !warned){ warned=true; say('Faltam '+empty+' casa(s) por preencher. Clique novamente em Submeter para enviar assim mesmo.'); return; }
+    if(t0) tick();
+    var attrs={ nome:nome.slice(0,100), certas:D.words.filter(wordOk).length, total:D.words.length,
+                tempo_seg:elapsed, data_resposta:Date.now() };
+    if(!CONFIG.serviceUrl){ finish(false, attrs); return; }
+    bSubmit.disabled=true; say('A gravar...');
+    fetch(CONFIG.serviceUrl+'/addFeatures', {
+      method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:'f=json&features='+encodeURIComponent(JSON.stringify([{attributes:attrs}]))
+    }).then(function(r){ return r.json(); }).then(function(j){
+      var res=j.addResults && j.addResults[0];
+      if(res && res.success){ finish(true, attrs); return; }
+      throw new Error((j.error && j.error.message) || (res && res.error && res.error.description) || 'resposta inesperada do serviço');
+    }).catch(function(e){
+      bSubmit.disabled=false; say('Não foi possível gravar a resposta ('+e.message+'). Tente novamente.');
+    });
+  });
+  bAll.addEventListener('click', function(){
+    Object.keys(cells).forEach(function(k){ var x=cells[k]; if(x.inp.value!==x.sol){ x.inp.value=x.sol; } });
+  });
+  bClear.addEventListener('click', function(){
+    if(submitted) return;
+    Object.keys(cells).forEach(function(k){ if(!cells[k].given) cells[k].inp.value=''; }); refreshDone(); say('');
+  });
+  go(D.words[0].cells[0], D.words[0].dir);
+})();
+</script>
+</body>
+</html>
